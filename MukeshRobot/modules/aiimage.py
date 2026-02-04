@@ -41,7 +41,9 @@ async def imagine_(b, message: Message):
         await b.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
         
         # Use Pollinations.ai (Free, No API Key)
-        url = f"https://image.pollinations.ai/prompt/{text}"
+        from urllib.parse import quote
+        encoded_prompt = quote(text)
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed=42"
         response = requests.get(url)
         response.raise_for_status()
         
