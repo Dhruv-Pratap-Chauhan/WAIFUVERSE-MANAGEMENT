@@ -18,17 +18,17 @@ CANVAS_SIZE = (1000, 500)
 
 async def generate_couple_image(c1_pfp_path, c2_pfp_path):
     # Create a sleek semi-dark background
-    canvas = Image.new("RGB", CANVAS_SIZE, (18, 18, 18))
+    canvas = Image.new("RGB", CANVAS_SIZE, (20, 20, 20))
     
     def get_pfp(path):
         try:
             if path and os.path.exists(path):
                 img = Image.open(path).convert("RGBA").resize(PFP_SIZE)
                 return img
-        except:
-            pass
-        # High-quality Placeholder
-        img = Image.new("RGBA", PFP_SIZE, (50, 50, 50))
+        except Exception as e:
+            print(f"PFP Load Error: {e}")
+        # High-quality Placeholder (Pink-ish Gray)
+        img = Image.new("RGBA", PFP_SIZE, (60, 50, 60))
         return img
 
     p1 = get_pfp(c1_pfp_path)
@@ -41,17 +41,17 @@ async def generate_couple_image(c1_pfp_path, c2_pfp_path):
     # DRAW A LARGE PREMIUM HEART IN THE MIDDLE
     draw = ImageDraw.Draw(canvas, "RGBA")
     
-    # Custom Heart Drawing Logic (Vector style)
-    def draw_heart(draw, x, y, size, fill):
-        # Two circles
-        radius = size // 2
-        draw.ellipse([x - size, y - size, x, y], fill=fill) # Left
-        draw.ellipse([x, y - size, x + size, y], fill=fill) # Right
-        # Triangle bottom
-        draw.polygon([(x - size, y - radius//2), (x + size, y - radius//2), (x, y + size)], fill=fill)
+    def draw_heart(draw, x, y, size):
+        # We'll use a larger size and a better pink
+        # Bottom Triangle
+        draw.polygon([(x - size, y), (x + size, y), (x, y + size)], fill=(255, 20, 147, 255))
+        # Top two circles
+        radius = size
+        draw.ellipse([x - size, y - size, x, y + 20], fill=(255, 20, 147, 255))
+        draw.ellipse([x, y - size, x + size, y + 20], fill=(255, 20, 147, 255))
 
-    # Vivid Pink Heart
-    draw_heart(draw, 500, 230, 90, (255, 51, 153, 255))
+    # Center is 500, 250. Let's place heart there.
+    draw_heart(draw, 500, 200, 100) 
 
     img_bin = BytesIO()
     canvas.save(img_bin, "JPEG", quality=100)
@@ -61,15 +61,14 @@ async def generate_couple_image(c1_pfp_path, c2_pfp_path):
 async def resolve_user(chat_id, user_id):
     """Reliably fetch a fresh user object"""
     try:
-        member = await pbot.get_chat_member(chat_id, user_id)
-        if member and member.user:
-            return member.user
+        # Prioritize get_users as it usually has the full object if indexed
+        return await pbot.get_users(user_id)
     except:
         try:
-            return await pbot.get_users(user_id)
+            member = await pbot.get_chat_member(chat_id, user_id)
+            return member.user
         except:
             return None
-    return None
 
 @pbot.on_message(filters.command(["couple", "couples"]))
 async def couple(_, message):
@@ -86,17 +85,15 @@ async def couple(_, message):
         
         if not is_selected:
             status_msg = await message.reply_text("🔍 ꜱᴄᴀɴɴɪɴɢ ᴄʜᴀᴛ ꜰᴏʀ ᴄᴏᴜᴘʟᴇꜱ...")
-            # Step 1: Scan members (Filter Bots & Deleted accounts)
+            # Step 1: Scan members
             list_of_users = []
             async for member in pbot.get_chat_members(chat_id, limit=300):
                 u = member.user
-                if not u.is_bot and not u.is_deleted:
-                    # Filter generic "Deleted Account" names just in case
-                    if u.first_name and "Deleted Account" not in u.first_name:
-                        list_of_users.append(u)
+                if not u.is_bot and not u.is_deleted and u.first_name:
+                    list_of_users.append(u)
             
             if len(list_of_users) < 2:
-                return await status_msg.edit("ɴᴏᴛ ᴇɴᴏᴜɢʜ ᴀᴄᴛɪᴠᴇ ᴜsᴇʀs ʜᴇʀᴇ (ɴᴇᴇᴅ ᴀᴛ ʟᴇᴀsᴛ 2).")
+                return await status_msg.edit("ɴᴏᴛ ᴇɴᴏᴜɢʜ ᴀᴄᴛɪᴠᴇ ᴜsᴇʀs ʜᴇʀᴇ.")
             
             # Step 2: Randomly Select
             c1_selected = random.choice(list_of_users)
@@ -106,12 +103,9 @@ async def couple(_, message):
             
             bond = random.randint(30, 100)
             
-            # Step 3: Ensure data is fresh
-            c1 = await resolve_user(chat_id, c1_selected.id) or c1_selected
-            c2 = await resolve_user(chat_id, c2_selected.id) or c2_selected
-
-            p1_path = await pbot.download_media(c1.photo.big_file_id) if (c1 and getattr(c1, "photo", None)) else None
-            p2_path = await pbot.download_media(c2.photo.big_file_id) if (c2 and getattr(c2, "photo", None)) else None
+            # Step 3: PFP Fetching
+            p1_path = await pbot.download_media(c1_selected.photo.big_file_id) if (c1_selected and getattr(c1_selected, "photo", None)) else None
+            p2_path = await pbot.download_media(c2_selected.photo.big_file_id) if (c2_selected and getattr(c2_selected, "photo", None)) else None
             
             img = await generate_couple_image(p1_path, p2_path)
             
@@ -120,7 +114,7 @@ async def couple(_, message):
 
             caption = f"""<b>ᴄᴏᴜᴘʟᴇ ᴏꜰ ᴛʜᴇ ᴅᴀʏ :</b> {today}
  
- {c1.mention} + {c2.mention} = 💗
+ {c1_selected.mention} + {c2_selected.mention} = 💗
  <b>ʙᴏɴᴅ :</b> {bond}%
 
  ɴᴇᴡ ᴄᴏᴜᴘʟᴇ ᴏꜰ ᴛʜᴇ ᴅᴀʏ ᴄᴀɴ ʙᴇ ᴄʜᴏsᴇɴ ᴀᴛ 12 ᴀᴍ {tomorrow}"""
@@ -128,11 +122,10 @@ async def couple(_, message):
             await status_msg.delete()
             await pbot.send_photo(chat_id, photo=img, caption=caption, parse_mode=ParseMode.HTML)
              
-            couple_data = {"c1_id": c1.id, "c2_id": c2.id, "bond": bond}
+            couple_data = {"c1_id": c1_selected.id, "c2_id": c2_selected.id, "bond": bond}
             await save_couple(chat_id, today, couple_data)
 
         else:
-            # Re-fetch from stored IDs
             c1_id = int(is_selected["c1_id"])
             c2_id = int(is_selected["c2_id"])
             bond = is_selected.get("bond", random.randint(60, 100))
