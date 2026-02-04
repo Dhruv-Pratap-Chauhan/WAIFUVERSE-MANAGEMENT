@@ -24,7 +24,7 @@ def anime_quote():
             return quote, character, anime
     except Exception:
         pass
-    return "Eyes are the window to the soul.", "Mukesh", "The Bot"
+    return "Keep moving forward, until all your enemies are destroyed.", "WaifuVerse", "System"
 
 
 
