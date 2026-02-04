@@ -35,10 +35,8 @@ async def generate_couple_image(c1_pfp_path, c2_pfp_path):
 
     # Draw a heart in the middle
     draw = ImageDraw.Draw(canvas)
-    # Using simple text for heart since we don't know accessible font paths easily
-    # But we can draw a simple shape or just assume a heart emoji works if font supports it
-    # We'll just draw a big pink "+" or something if no heart
-    draw.text((470, 200), "❤️", fill=(255, 0, 100)) # Heart emoji usually works with default fonts on Linux
+    # Using a larger heart and pink color
+    draw.text((470, 200), "💗", fill=(255, 105, 180)) 
 
     img_bin = BytesIO()
     canvas.save(img_bin, "JPEG")
@@ -60,23 +58,31 @@ async def couple(_, message):
         
         if not is_selected:
             list_of_users = []
-            async for i in pbot.get_chat_members(message.chat.id, limit=100):
+            async for i in pbot.get_chat_members(message.chat.id, limit=200):
                 if not i.user.is_bot:
                     list_of_users.append(i.user)
             
             if len(list_of_users) < 2:
                 return await message.reply_text("ɴᴏᴛ ᴇɴᴏᴜɢʜ ᴜsᴇʀs ʜᴇʀᴇ (ɴᴇᴇᴅ ᴀᴛ ʟᴇᴀsᴛ 2).")
             
-            c1 = random.choice(list_of_users)
-            c2 = random.choice(list_of_users)
-            while c1.id == c2.id:
-                c1 = random.choice(list_of_users)
+            c1_selected = random.choice(list_of_users)
+            c2_selected = random.choice(list_of_users)
+            while c1_selected.id == c2_selected.id:
+                c1_selected = random.choice(list_of_users)
             
+            # Fetch full user objects to ensure PFPs are accessible
+            try:
+                c1 = await pbot.get_users(c1_selected.id)
+                c2 = await pbot.get_users(c2_selected.id)
+            except Exception as e:
+                print(f"Error fetching full user objects: {e}")
+                c1, c2 = c1_selected, c2_selected
+
             bond = random.randint(1, 100)
             
             # Download PFPs
-            p1_path = await pbot.download_media(c1.photo.big_file_id) if c1.photo else None
-            p2_path = await pbot.download_media(c2.photo.big_file_id) if c2.photo else None
+            p1_path = await pbot.download_media(c1.photo.big_file_id) if (c1 and hasattr(c1, 'photo') and c1.photo) else None
+            p2_path = await pbot.download_media(c2.photo.big_file_id) if (c2 and hasattr(c2, 'photo') and c2.photo) else None
             
             img = await generate_couple_image(p1_path or "", p2_path or "")
             
@@ -107,8 +113,8 @@ async def couple(_, message):
                 c1_mention = c1.mention
                 c2_mention = c2.mention
                 
-                p1_path = await pbot.download_media(c1.photo.big_file_id) if c1.photo else None
-                p2_path = await pbot.download_media(c2.photo.big_file_id) if c2.photo else None
+                p1_path = await pbot.download_media(c1.photo.big_file_id) if (c1 and hasattr(c1, 'photo') and c1.photo) else None
+                p2_path = await pbot.download_media(c2.photo.big_file_id) if (c2 and hasattr(c2, 'photo') and c2.photo) else None
                 img = await generate_couple_image(p1_path or "", p2_path or "")
                 
                 if p1_path and os.path.exists(p1_path): os.remove(p1_path)
