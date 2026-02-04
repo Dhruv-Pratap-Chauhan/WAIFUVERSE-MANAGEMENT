@@ -42,11 +42,23 @@ async def imagine_(b, message: Message):
         
         # Use Pollinations.ai (Free, No API Key)
         from urllib.parse import quote
+        import random
         encoded_prompt = quote(text)
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed=42"
-        response = requests.get(url)
-        response.raise_for_status()
         
+        # Try up to 2 times
+        for attempt in range(2):
+            try:
+                seed = random.randint(1, 1000000)
+                url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width=1024&height=1024&nologo=True"
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+                response = requests.get(url, headers=headers, timeout=60)
+                response.raise_for_status()
+                break
+            except Exception as e:
+                if attempt == 1:
+                    raise e
+                continue
+
         with open("dhruv.jpg", 'wb') as f:
             f.write(response.content)
         caption = f"""
@@ -55,9 +67,9 @@ async def imagine_(b, message: Message):
     🥀ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ : {message.from_user.mention}
     """
         await dhruv.delete()
-        await message.reply_photo("dhruv.jpg",caption=caption,quote=True)
+        await message.reply_photo("dhruv.jpg", caption=caption, quote=True)
     except Exception as e:
-        await dhruv.edit_text(f"error {e}")
+        await dhruv.edit_text(f"Generation failed. The AI server might be busy. Please try again later.\n\nError: {e}")
     
 # -----------CREDITS -----------
 # telegram : @legend_coder
