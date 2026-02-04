@@ -40,36 +40,59 @@ async def imagine_(b, message: Message):
     try:
         await b.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
         
-        # Use Pollinations.ai (Free, No API Key)
         from urllib.parse import quote
         import random
         encoded_prompt = quote(text)
         
-        # Try up to 2 times
-        for attempt in range(2):
-            try:
-                seed = random.randint(1, 1000000)
-                url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width=1024&height=1024&nologo=True"
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-                response = requests.get(url, headers=headers, timeout=60)
-                response.raise_for_status()
-                break
-            except Exception as e:
-                if attempt == 1:
-                    raise e
-                continue
+        generated_path = "waifuverse_image.jpg"
+        success = False
+        
+        # Method 1: Pollinations (High Quality)
+        try:
+            seed = random.randint(1, 1000000)
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width=1024&height=1024&nologo=True"
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(url, headers=headers, timeout=30)
+            # Pollinations returns binary image directly
+            if response.status_code == 200:
+                with open(generated_path, 'wb') as f:
+                    f.write(response.content)
+                success = True
+        except Exception as e:
+            print(f"Pollinations Error: {e}")
 
-        with open("dhruv.jpg", 'wb') as f:
-            f.write(response.content)
-        caption = f"""
-    💘sᴜᴄᴇssғᴜʟʟʏ ɢᴇɴᴇʀᴀᴛᴇᴅ : {text}
-    ✨ɢᴇɴᴇʀᴀᴛᴇᴅ ʙʏ : @{BOT_USERNAME}
-    🥀ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ : {message.from_user.mention}
-    """
-        await dhruv.delete()
-        await message.reply_photo("dhruv.jpg", caption=caption, quote=True)
+        # Method 2: Hercai (Stable Fallback)
+        if not success:
+            try:
+                # Hercai v3 Stable
+                url = f"https://hercai.onrender.com/v3/text2img?prompt={encoded_prompt}"
+                response = requests.get(url, timeout=30)
+                if response.status_code == 200:
+                    data = response.json()
+                    image_url = data.get("url")
+                    if image_url:
+                        img_res = requests.get(image_url, timeout=30)
+                        with open(generated_path, 'wb') as f:
+                            f.write(img_res.content)
+                        success = True
+            except Exception as e:
+                print(f"Hercai Error: {e}")
+
+        if success:
+            caption = f"""
+💘 sᴜᴄᴄᴇssғᴜʟʟʏ ɢᴇɴᴇʀᴀᴛᴇᴅ !
+✨ ᴘʀᴏᴍᴘᴛ: {text}
+🥀 ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ: {message.from_user.mention}
+"""
+            await message.reply_photo(generated_path, caption=caption, quote=True)
+            await dhruv.delete()
+            if os.path.exists(generated_path):
+                os.remove(generated_path)
+        else:
+            await dhruv.edit_text("❌ All AI image servers are currently busy or down. Please try again in a few minutes.")
+
     except Exception as e:
-        await dhruv.edit_text(f"Generation failed. The AI server might be busy. Please try again later.\n\nError: {e}")
+        await dhruv.edit_text(f"Error: {e}")
     
 # -----------CREDITS -----------
 # telegram : @legend_coder

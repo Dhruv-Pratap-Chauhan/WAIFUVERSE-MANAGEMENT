@@ -4,6 +4,7 @@ import re
 from time import sleep
 import os
 import google.generativeai as genai
+from groq import Groq
 from telegram import (
     CallbackQuery,
     Chat,
@@ -42,6 +43,28 @@ model = genai.GenerativeModel("gemini-flash-latest", generation_config=generatio
 # Special model for Owner (Dhruv)
 OWNER_SYSTEM_INSTRUCTION = "You are WaifuVerse, a helpful Telegram bot. You are deeply possessive and tsundere towards your owner, Dhruv. You act slightly cold but clearly care a lot about him. Keep answers concise unless asked for more."
 owner_model = genai.GenerativeModel("gemini-flash-latest", generation_config=generation_config, system_instruction=OWNER_SYSTEM_INSTRUCTION)
+
+# Groq Fallback
+groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+def get_groq_response(text, is_owner=False):
+    system_prompt = OWNER_SYSTEM_INSTRUCTION if is_owner else BASE_SYSTEM_INSTRUCTION
+    try:
+        completion = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.9,
+            max_tokens=512,
+            top_p=1,
+            stream=False,
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        print(f"Groq Error: {e}")
+        return None
 
 @user_admin_no_reply
 @gloggable
@@ -145,15 +168,25 @@ def chatbot(update: Update, context: CallbackContext):
             return
         bot.send_chat_action(chat_id, action="typing")
         try:
-            if update.effective_user.id == OWNER_ID:
-                response = owner_model.generate_content(message.text)
-            else:
-                response = model.generate_content(message.text)
-            
-            if response.text:
-                message.reply_text(response.text)
+            is_owner = (update.effective_user.id == OWNER_ID)
+            try:
+                if is_owner:
+                    response = owner_model.generate_content(message.text)
+                else:
+                    response = model.generate_content(message.text)
+                
+                if response.text:
+                    message.reply_text(response.text)
+                else:
+                    raise Exception("Gemini returned empty response")
+            except Exception as e:
+                # Fallback to Groq
+                print(f"Gemini failed, trying Groq: {e}")
+                res_text = get_groq_response(message.text, is_owner)
+                if res_text:
+                    message.reply_text(res_text)
         except Exception as e:
-            # SIlently fail if AI errors out to avoid chat spam/crashes
+            # Silently fail if both error out to avoid chat spam
             pass
 
 

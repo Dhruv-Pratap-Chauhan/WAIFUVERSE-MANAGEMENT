@@ -60,3 +60,4 @@ youtube_search_python
 psycopg2-binary
 google-generativeai
 python-dotenv
+groq
