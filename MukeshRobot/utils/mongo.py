@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient as MongoCli
 from MukeshRobot import MONGO_DB_URI
 
 mongo = MongoCli(MONGO_DB_URI)
-db = mongo.MukeshRobot
+db = mongo.waifuverse
 
 coupledb = db.couple
 karmadb = db.karma
