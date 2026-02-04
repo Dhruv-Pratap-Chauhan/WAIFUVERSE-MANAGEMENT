@@ -30,7 +30,7 @@ lxml==5.3.0
 
 markdown2==2.5.0
 MukeshAPI
-motor==3.6.0
+motor==3.7.1
 nekos.py
 opencv-python
 pretty-errors
