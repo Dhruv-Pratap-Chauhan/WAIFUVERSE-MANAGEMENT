@@ -1,0 +1,14 @@
+[Unit]
+Description=WaifuVerse Management Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/waifu_mgmt
+ExecStart=/home/ubuntu/waifu_mgmt/venv/bin/python3 -m MukeshRobot
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
