@@ -18,21 +18,15 @@ generation_config = {
     "top_k": 1,
     "max_output_tokens": 512,
 }
-# Base model for general users
+# System instructions for the model
 BASE_SYSTEM_INSTRUCTION = """You are WaifuVerse, a helpful Telegram bot. 
 Your primary goal is to provide accurate, concise, and well-reasoned information. 
 - Keep answers under 2-3 sentences unless details are requested. 
 - Avoid placeholders. Be friendly and efficient.
+- If asked, the owner of this bot is Dhruv.
 - Language Policy: If the user asks in Hindi, reply in 'Hinglish' (Hindi language written in Roman/English alphabets). Do NOT use Devanagari/Hindi script. If the user asks in English, reply in English."""
 
 model = genai.GenerativeModel("gemini-1.5-flash", generation_config=generation_config, system_instruction=BASE_SYSTEM_INSTRUCTION)
-
-# Special model for Owner (Dhruv)
-OWNER_SYSTEM_INSTRUCTION = """You are WaifuVerse, a helpful Telegram bot. 
-You are deeply possessive and tsundere towards your owner, Dhruv. You act slightly cold but clearly care a lot about him. 
-- Always provide accurate info with logical reasoning while maintaining your tsundere persona. Keep it concise.
-- Language Policy: If the user (Dhruv) asks in Hindi, reply in 'Hinglish' (Hindi language written in Roman/English alphabets). Do NOT use Devanagari/Hindi script. If he asks in English, reply in English."""
-owner_model = genai.GenerativeModel("gemini-1.5-flash", generation_config=generation_config, system_instruction=OWNER_SYSTEM_INSTRUCTION)
 
 # InMemory History
 CHAT_HISTORY = {}
@@ -44,10 +38,9 @@ def add_to_history(chat_id, role, content):
     if len(CHAT_HISTORY[chat_id]) > 10:
         CHAT_HISTORY[chat_id] = CHAT_HISTORY[chat_id][-10:]
 
-async def get_groq_response(chat_id, text, is_owner=False):
-    system_prompt = OWNER_SYSTEM_INSTRUCTION if is_owner else BASE_SYSTEM_INSTRUCTION
+async def get_groq_response(chat_id, text):
     history = CHAT_HISTORY.get(chat_id, [])
-    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": text}]
+    messages = [{"role": "system", "content": BASE_SYSTEM_INSTRUCTION}] + history + [{"role": "user", "content": text}]
     
     try:
         completion = await groq_client.chat.completions.create(
@@ -75,11 +68,11 @@ async def chat_gpt(bot, message):
             return
 
         a = message.text.split(' ', 1)[1]
-        is_owner = (message.from_user.id == OWNER_ID)
+        
         chat_id = message.chat.id
 
         # Try Groq first as Primary
-        response_text = await get_groq_response(chat_id, a, is_owner)
+        response_text = await get_groq_response(chat_id, a)
         
         if response_text:
             await message.reply_text(f"{response_text}\n\n🎉 ᴘᴏᴡᴇʀᴇᴅ ʙʏ @{BOT_USERNAME}", parse_mode=ParseMode.MARKDOWN)
@@ -87,11 +80,8 @@ async def chat_gpt(bot, message):
             # Fallback to Gemini
             print(f"Groq failed, trying Gemini for chat {chat_id}")
             try:
-                if is_owner:
-                    res = await owner_model.generate_content_async(a)
-                else:
-                    res = await model.generate_content_async(a)
-                
+                res = await model.generate_content_async(a)
+    
                 if res.text:
                     await message.reply_text(f"{res.text}\n\n🎉 ᴘᴏᴡᴇʀᴇᴅ ʙʏ @{BOT_USERNAME}", parse_mode=ParseMode.MARKDOWN)
                     # Add to history for context
