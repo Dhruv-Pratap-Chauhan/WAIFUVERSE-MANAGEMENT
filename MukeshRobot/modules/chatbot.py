@@ -164,7 +164,8 @@ def chatbot_settings(update: Update, context: CallbackContext):
 
 def is_chatbot_triggered(context: CallbackContext, message):
     reply_message = message.reply_to_message
-    if message.text.lower() == "dhruv":
+    text = message.text.lower()
+    if text == "dhruv" or "waifuverse" in text:
         return True
     elif BOT_USERNAME in message.text.upper():
         return True
