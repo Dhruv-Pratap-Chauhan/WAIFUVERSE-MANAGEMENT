@@ -287,6 +287,7 @@ def clear(update: Update, context: CallbackContext):
             update.effective_message.reply_text("That's not a note in my database!")
 
 
+@user_admin
 def clearall(update: Update, context: CallbackContext):
     chat = update.effective_chat
     user = update.effective_user

@@ -1,7 +1,6 @@
 import html
 import json
 import re
-from time import sleep
 import os
 import google.generativeai as genai
 from groq import Groq
@@ -37,31 +36,52 @@ generation_config = {
     "max_output_tokens": 512,
 }
 # Base model for general users
-BASE_SYSTEM_INSTRUCTION = "You are WaifuVerse, a helpful Telegram bot. Keep your answers short, concise, and to-the-point (under 2-3 sentences) unless explicitly asked for details or long explanation. Never use placeholders. You are loyal and friendly."
-model = genai.GenerativeModel("gemini-flash-latest", generation_config=generation_config, system_instruction=BASE_SYSTEM_INSTRUCTION)
+BASE_SYSTEM_INSTRUCTION = """You are WaifuVerse, a helpful Telegram bot. 
+Your primary goal is to provide accurate, concise, and well-reasoned information. 
+- Keep answers under 2-3 sentences unless details are requested. 
+- Avoid placeholders. Be friendly and efficient.
+- Language Policy: If the user asks in Hindi, reply in 'Hinglish' (Hindi language written in Roman/English alphabets). Do NOT use Devanagari/Hindi script. If the user asks in English, reply in English."""
+
+model = genai.GenerativeModel("gemini-1.5-flash", generation_config=generation_config, system_instruction=BASE_SYSTEM_INSTRUCTION)
 
 # Special model for Owner (Dhruv)
-OWNER_SYSTEM_INSTRUCTION = "You are WaifuVerse, a helpful Telegram bot. You are deeply possessive and tsundere towards your owner, Dhruv. You act slightly cold but clearly care a lot about him. Keep answers concise unless asked for more."
-owner_model = genai.GenerativeModel("gemini-flash-latest", generation_config=generation_config, system_instruction=OWNER_SYSTEM_INSTRUCTION)
+OWNER_SYSTEM_INSTRUCTION = """You are WaifuVerse, a helpful Telegram bot. 
+You are deeply possessive and tsundere towards your owner, Dhruv. You act slightly cold but clearly care a lot about him. 
+- Always provide accurate info with logical reasoning while maintaining your tsundere persona. Keep it concise.
+- Language Policy: If the user (Dhruv) asks in Hindi, reply in 'Hinglish' (Hindi language written in Roman/English alphabets). Do NOT use Devanagari/Hindi script. If he asks in English, reply in English."""
+owner_model = genai.GenerativeModel("gemini-1.5-flash", generation_config=generation_config, system_instruction=OWNER_SYSTEM_INSTRUCTION)
 
-# Groq Fallback
+# Groq client
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-def get_groq_response(text, is_owner=False):
+# InMemory History
+CHAT_HISTORY = {}
+
+def add_to_history(chat_id, role, content):
+    if chat_id not in CHAT_HISTORY:
+        CHAT_HISTORY[chat_id] = []
+    CHAT_HISTORY[chat_id].append({"role": role, "content": content})
+    if len(CHAT_HISTORY[chat_id]) > 10:
+        CHAT_HISTORY[chat_id] = CHAT_HISTORY[chat_id][-10:]
+
+def get_groq_response(chat_id, text, is_owner=False):
     system_prompt = OWNER_SYSTEM_INSTRUCTION if is_owner else BASE_SYSTEM_INSTRUCTION
+    history = CHAT_HISTORY.get(chat_id, [])
+    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": text}]
+    
     try:
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.9,
-            max_tokens=512,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1024,
             top_p=1,
             stream=False,
         )
-        return completion.choices[0].message.content
+        response_text = completion.choices[0].message.content
+        add_to_history(chat_id, "user", text)
+        add_to_history(chat_id, "assistant", response_text)
+        return response_text
     except Exception as e:
         print(f"Groq Error: {e}")
         return None
@@ -69,12 +89,12 @@ def get_groq_response(text, is_owner=False):
 @user_admin_no_reply
 @gloggable
 def chatbot_disable(update: Update, context: CallbackContext) -> str:
-    query: Optional[CallbackQuery] = update.callback_query
-    user: Optional[User] = update.effective_user
+    query: CallbackQuery = update.callback_query
+    user: User = update.effective_user
     match = re.match(r"rm_chat\((.+?)\)", query.data)
     if match:
         user_id = match.group(1)
-        chat: Optional[Chat] = update.effective_chat
+        chat: Chat = update.effective_chat
         is_disabled = sql.disable_chatbot(chat.id)
         if is_disabled:
             is_disabled = sql.disable_chatbot(user_id)
@@ -97,12 +117,12 @@ def chatbot_disable(update: Update, context: CallbackContext) -> str:
 @user_admin_no_reply
 @gloggable
 def chatbot_enable(update: Update, context: CallbackContext) -> str:
-    query: Optional[CallbackQuery] = update.callback_query
-    user: Optional[User] = update.effective_user
+    query: CallbackQuery = update.callback_query
+    user: User = update.effective_user
     match = re.match(r"add_chat\((.+?)\)", query.data)
     if match:
         user_id = match.group(1)
-        chat: Optional[Chat] = update.effective_chat
+        chat: Chat = update.effective_chat
         is_disabled = sql.enable_chatbot(chat.id)
         if is_disabled:
             is_disabled = sql.enable_chatbot(user_id)
@@ -169,31 +189,35 @@ def chatbot(update: Update, context: CallbackContext):
         bot.send_chat_action(chat_id, action="typing")
         try:
             is_owner = (update.effective_user.id == OWNER_ID)
-            try:
-                if is_owner:
-                    response = owner_model.generate_content(message.text)
-                else:
-                    response = model.generate_content(message.text)
-                
-                if response.text:
-                    message.reply_text(response.text)
-                else:
-                    raise Exception("Gemini returned empty response")
-            except Exception as e:
-                # Fallback to Groq
-                print(f"Gemini failed, trying Groq: {e}")
-                res_text = get_groq_response(message.text, is_owner)
-                if res_text:
-                    message.reply_text(res_text)
+            
+            # Try Groq first as Primary
+            response_text = get_groq_response(chat_id, message.text, is_owner)
+            
+            if response_text:
+                message.reply_text(response_text)
+            else:
+                # Fallback to Gemini
+                print(f"Groq failed, trying Gemini for chatbot in {chat_id}")
+                try:
+                    if is_owner:
+                        res = owner_model.generate_content(message.text)
+                    else:
+                        res = model.generate_content(message.text)
+                    
+                    if res.text:
+                        message.reply_text(res.text)
+                        # Add to history
+                        add_to_history(chat_id, "user", message.text)
+                        add_to_history(chat_id, "assistant", res.text)
+                    else:
+                        # Silently fail
+                        pass
+                except Exception as e:
+                    print(f"Gemini also failed: {e}")
+                    pass
         except Exception as e:
-            # Silently fail if both error out to avoid chat spam
+            print(f"Chatbot failed: {e}")
             pass
-
-
-
-
-
-
 
 CHATBOTK_HANDLER = CommandHandler("chatbot", chatbot_settings, run_async=True)
 ADD_CHAT_HANDLER = CallbackQueryHandler(chatbot_enable, pattern=r"add_chat", run_async=True)

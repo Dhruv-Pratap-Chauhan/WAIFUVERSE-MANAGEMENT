@@ -94,6 +94,7 @@ def list_handlers(update, context):
 
 
 # NOT ASYNC BECAUSE DISPATCHER HANDLER RAISED
+@user_admin
 @typing_action
 def filters(update, context):
     chat = update.effective_chat
